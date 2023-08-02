@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import sys
+from lib.logging import setup_logging
 from lib.sudoku import Sudoku
 
 
@@ -10,9 +11,9 @@ def main():
     print(f"Sudoku:\n{sudoku}")
     while True:
         sudoku.handle_box_number()
-        print(f"Sudoku:\n{sudoku}")
     print("Finished")
 
 
 if __name__ == "__main__":
+    setup_logging()
     main()
