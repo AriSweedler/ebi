@@ -8,10 +8,9 @@ def main():
     sudoku = Sudoku(sys.stdin)
     print("Parsed")
     print(f"Sudoku:\n{sudoku}")
-    print(sudoku.compact_pencilmarks([1, 2, 3, 6, 7, 8, 9]))
-    print(sudoku.compact_pencilmarks([1, 3, 4, 5, 7, 9]))
-    print(sudoku.compact_pencilmarks([1, 3, 4, 5, 7, 8, 9]))
-    print(sudoku.compact_pencilmarks([1, 2, 3, 4, 5, 6, 8, 9]))
+    while True:
+        sudoku.handle_box_number()
+        print(f"Sudoku:\n{sudoku}")
     print("Finished")
 
 
