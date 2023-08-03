@@ -327,7 +327,7 @@ class Sudoku:
     def dump_answers(self):
         ans = list()
         for row in self.answers:
-            ans.append("|".join([str(r) for r in row]))
+            ans.append("|".join([str(r) if r else "_" for r in row]))
         return '\n'.join(["Dumping answer:", *ans])
 
     def endgame(self):
