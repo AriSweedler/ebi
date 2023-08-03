@@ -27,8 +27,13 @@ class Sudoku:
     box_numbers = None
     answers = [[None for _ in range(9)] for _ in range(9)]
     used_locks = set()
+    used_daggers = set()
 
     def __init__(self, _data):
+        # Init caches for "advanced technique"s
+        self.used_locks = set()
+        self.used_daggers = set()
+
         # Make a 9 by 9 grid, each of which contains a pencilmarked_cell
         self.pencilmarks = [
             [self.full_pencilmarked_cell() for _ in range(1, 10)] for i in range(1, 10)
@@ -55,7 +60,6 @@ class Sudoku:
             self.answers[cell_i[0]][cell_i[1]] = value
 
         # This comment is useless
-        self.used_locks = set()
         logging.info(f"[INIT] complete")
 
     def validate_input(self):
@@ -148,7 +152,9 @@ class Sudoku:
         *cell_i, value = self.pop_box_number()
         if value is None:
             self.endgame()
-        logging.debug(f"[PENCILMARKS] We have a box number to deal with | {cell_i=} {value=}")
+        logging.debug(
+            f"[PENCILMARKS] We have a box number to deal with | {cell_i=} {value=}"
+        )
         while self.update_pencilmarks(value, cell_i):
             pass
 
@@ -161,16 +167,23 @@ class Sudoku:
     def update_pencilmarks(self, value, cell_i):
         row_i, col_i = cell_i
 
-        trad_pm = self.update_pencilmarks_row(value, row_i) or \
-        self.update_pencilmarks_col(value, col_i) or \
-        self.update_pencilmarks_box(value, (row_i, col_i)) or \
-        self.update_pencilmarks_cell((row_i, col_i))
+        trad_pm = (
+            self.update_pencilmarks_row(value, row_i)
+            or self.update_pencilmarks_col(value, col_i)
+            or self.update_pencilmarks_box(value, (row_i, col_i))
+            or self.update_pencilmarks_cell((row_i, col_i))
+        )
         if trad_pm:
-            logging.debug(f"[PENCILMARKS] We have updated pencilmarks thanks to | {value=} {cell_i=}")
+            logging.debug(
+                f"[PENCILMARKS] We have updated pencilmarks thanks to | {value=} {cell_i=}"
+            )
             logging.debug(f"[PENCILMARKS] [DATA]:\n" + str(self))
             return True
 
-        if self.update_pencilmarks_locks():
+        special_pm = (
+            self.update_pencilmarks_locks() or self.update_pencilmarks_daggers()
+        )
+        if special_pm:
             logging.debug(f"[PENCILMARKS] We have updated pencilmarks thanks to locks")
             logging.debug(f"[PENCILMARKS] [DATA]:\n" + str(self))
             return True
@@ -185,16 +198,17 @@ class Sudoku:
         for row_i in range(9):
             self.erase_pencilmark(value, (row_i, col_i))
 
-    def update_pencilmarks_box(self, value, box_i):
-        row_i, col_i = box_i
-        box_bot, box_top = self.box_unclamp(row_i)
-        box_left, box_right = self.box_unclamp(col_i)
-        for row_i in range(box_bot, box_top):
-            for col_i in range(box_left, box_right):
+    def update_pencilmarks_box(self, value, cell_i):
+        row_i, col_i = cell_i
+        box_i = self.get_box_i_from_cell(cell_i)
+        row_start = 3 * int(box_i / 3)
+        col_start = 3 * int(box_i % 3)
+        for row_i in range(row_start, row_start + 3):
+            for col_i in range(col_start, col_start + 3):
                 self.erase_pencilmark(value, (row_i, col_i))
 
-    def update_pencilmarks_cell(self, box_i):
-        row_i, col_i = box_i
+    def update_pencilmarks_cell(self, cell_i):
+        row_i, col_i = cell_i
         self.pencilmarks[row_i][col_i] = list()
 
     # This function takes us from weeny-hut jr to the salty spitoon.
@@ -207,7 +221,9 @@ class Sudoku:
         for lock in self.identify_locks():
             did_work = True
             orientation, values, cells = lock
-            logging.info(f"[PENCILMARKS] [LOCK] [IDENTIFY] We found a lock | {orientation=} {values=}, {cells=}")
+            logging.info(
+                f"[PENCILMARKS] [LOCK] [IDENTIFY] We found a lock | {orientation=} {values=}, {cells=}"
+            )
 
             # Destructure the answer
             row = list()
@@ -233,19 +249,27 @@ class Sudoku:
                         self.log_pencilmark_lock(value, cell_i, reason)
                         self.erase_pencilmark(value, cell_i)
             elif orientation == "box":
-                cell_in_box = (row[0], col[0])
-                for cell_i in [ci for ci in self.get_range_box_i(cell_in_box) if ci not in cells]:
+                cell_in_relevant_box = (row[0], col[0])
+                for cell_i in [
+                    ci
+                    for ci in self.get_box_range_from_cell(cell_in_relevant_box)
+                    if ci not in cells
+                ]:
                     for value in values:
                         reason = f"box {cells=} have {values}"
                         self.log_pencilmark_lock(value, cell_i, reason)
                         self.erase_pencilmark(value, cell_i)
             else:
-                logging.error(f"[PENCILMARKS] [LOCK] [FAIL] Unknown orientation from 'identify_locks' | {orientation=}")
+                logging.error(
+                    f"[PENCILMARKS] [LOCK] [FAIL] Unknown orientation from 'identify_locks' | {orientation=}"
+                )
                 sys.exit(1)
         return did_work
 
     def log_pencilmark_lock(self, value, cell_i, reason):
-        logging.debug(f"[PENCILMARKS] [LOCK] Erasing pencilmark | {value=} {cell_i=} {reason=}")
+        logging.debug(
+            f"[PENCILMARKS] [LOCK] Erasing pencilmark | {value=} {cell_i=} {reason=}"
+        )
 
     def hash_lockcell(self, lockcell):
         orientation, index, pencilmarks, _ = lockcell
@@ -268,10 +292,12 @@ class Sudoku:
         for cell_i in product(range(9), range(9)):
             row_i, col_i = cell_i
             pencilmarks = self.pencilmarks[row_i][col_i]
-            box_i = self.get_box_i(cell_i)
-            for lockcell in [("row", row_i, pencilmarks, cell_i),
-                    ("col", col_i, pencilmarks, cell_i),
-                    ("box", box_i, pencilmarks, cell_i)]:
+            box_i = self.get_box_i_from_cell(cell_i)
+            for lockcell in [
+                ("row", row_i, pencilmarks, cell_i),
+                ("col", col_i, pencilmarks, cell_i),
+                ("box", box_i, pencilmarks, cell_i),
+            ]:
                 my_hash = self.hash_lockcell(lockcell)
                 if lockbox.get(my_hash) == None:
                     lockbox[my_hash] = list()
@@ -297,12 +323,87 @@ class Sudoku:
             # return in the special format (different from lockcell)
             yield orientation, pencilmarks, [lockcell[3] for lockcell in lockcell_list]
 
+    # Example:
+    #
+    #     _,_,_ | _,_,_ | _,_,_
+    #     1,2,3 | _,_,_ | 4,5,6
+    #     4,5,_ | _,_,_ | 8,9,_
+    #     _____________________
+    #     _,_,7 | _,_,_ | _,_,_
+    #     _,_,_ | _,_,_ | _,_,_
+    #     _,_,_ | _,_,_ | _,_,_
+    #
+    # Thanks to "dagger"s, we know where the 7 goes in the top right box
+    def update_pencilmarks_daggers(self):
+        # For each box, check each row/col and see if we have a dagger
+        did_work = False
+        for dagger in self.identify_daggers():
+            did_work = True
+            orientation, value, cells = dagger
+            logging.info(
+                f"[PENCILMARKS] [DAGGER] [IDENTIFY] We found a dagger | {orientation=} {value=}, {cells=}"
+            )
+
+            if orientation == "row":
+                row_i, _ = cells[0]
+                for col_i in [c for c in range(9)]:
+                    reason = f"row {cells=} {value=}"
+                    cell_i = (row_i, col_i)
+                    if cell_i in cells:
+                        continue
+                    self.log_pencilmark_dagger(value, cell_i, reason)
+                    self.erase_pencilmark(value, cell_i)
+            elif orientation == "col":
+                _, col_i = cells[0]
+                for row_i in [r for r in range(9)]:
+                    reason = f"col {cells=} {value=}"
+                    cell_i = (row_i, col_i)
+                    if cell_i in cells:
+                        continue
+                    self.log_pencilmark_dagger(value, cell_i, reason)
+                    self.erase_pencilmark(value, cell_i)
+            else:
+                logging.error(
+                    f"[PENCILMARKS] [DAGGER] [FAIL] Unknown orientation from 'identify_daggers' | {orientation=}"
+                )
+                sys.exit(1)
+
+        return did_work
+
+    def identify_daggers(self):
+        for orientation, dagger_range, extra_range in self.generate_dagger_range():
+            for num in range(1, 10):
+                # Get the set of pencilmarks in a range
+                if num not in self.get_pencilmark_set_in_range_cells(dagger_range):
+                    continue
+                if num in self.get_pencilmark_set_in_range_cells(extra_range):
+                    continue
+
+                # Make sure to only use this lock once.
+                key = hash(tuple((orientation, num, tuple(dagger_range))))
+                if key in self.used_locks:
+                    continue
+                self.used_locks.add(key)
+
+                # return in the special format
+                yield orientation, num, dagger_range
+
+    def generate_dagger_range(self):
+        for box_i in range(9):
+            r, c = list(self.get_box_range_from_box_i(box_i))[0]
+            for o0, o1, o2 in [(0, 1, 2), (2, 0, 1), (1, 2, 0)]:
+                yield "row", list(product([r+o0], [c, c+1, c+2])), list(product([r+o1, r+o2], [c, c+1, c+2]))
+                yield "col", list(product([r, r+1, r+2], [c+o0])), list(product([r, r+1, r+2], [c+o1, c+o2]))
+
+
+    def log_pencilmark_dagger(self, value, cell_i, reason):
+        logging.debug(
+            f"[PENCILMARKS] [DAGGER] [ERASE] | {value=} {cell_i=} {reason=}"
+        )
+
+
     def scan_answers(self):
-        self.is_solved() or \
-        self.scan_answers_rows() or \
-        self.scan_answers_cols() or \
-        self.scan_answers_boxes() or \
-        self.scan_answers_cells()
+        self.is_solved() or self.scan_answers_rows() or self.scan_answers_cols() or self.scan_answers_boxes() or self.scan_answers_cells()
 
     def scan_answers_range(self, pencilmark_range: List[Pencilmark]):
         # Check if there are any numbers that only show up once
@@ -393,8 +494,8 @@ class Sudoku:
 
     def log_answer(self, value, cell_i, reason):
         logging.info(
-                f"[ANSWERS] [SCAN] The value can only be in one place | {reason=} {value=} {cell_i=}"
-                )
+            f"[ANSWERS] [SCAN] The value can only be in one place | {reason=} {value=} {cell_i=}"
+        )
 
     def pen_in_number(self, value, cell_i):
         row_i, col_i = cell_i
@@ -418,26 +519,33 @@ class Sudoku:
             yield self.pencilmarks[row_i][col_i]
 
     def get_pencilmarks_in_range_box(self, cell_i):
-        range_obj = self.get_range_box_i(cell_i)
+        range_obj = self.get_box_range_from_cell(cell_i)
         for r, c in range_obj:
             yield self.pencilmarks[r][c]
 
-    # Given an index, return the start and end of the box index
-    def box_unclamp(self, index):
-        remainder = index % 3
-        return index - remainder, index + (3 - remainder)
+    def get_pencilmark_set_in_range_cells(self, cells):
+        ans = set()
+        for cell_i in cells:
+            r, c = cell_i
+            for pencilmark in self.pencilmarks[r][c]:
+                ans.add(pencilmark)
+        return ans
 
-    def get_range_box_i(self, cell_i):
-        row_i, col_i = cell_i
-        box_bot, box_top = self.box_unclamp(row_i)
-        box_left, box_right = self.box_unclamp(col_i)
-        for row_i in range(box_bot, box_top):
-            for col_i in range(box_left, box_right):
+    def get_box_range_from_box_i(self, box_i):
+        row_start = 3 * int(box_i / 3)
+        col_start = 3 * int(box_i % 3)
+        for row_i in range(row_start, row_start + 3):
+            for col_i in range(col_start, col_start + 3):
                 yield row_i, col_i
 
-    def get_box_i(self, cell_i):
+    def get_box_range_from_cell(self, cell_i):
+        box_i = self.get_box_i_from_cell(cell_i)
+        for ans in self.get_box_range_from_box_i(box_i):
+            yield ans
+
+    def get_box_i_from_cell(self, cell_i):
         row_i, col_i = cell_i
-        return 3*int(row_i/3) + int(col_i/3)
+        return 3 * int(row_i / 3) + int(col_i / 3)
 
     def is_solved(self):
         for row in self.answers:
@@ -450,7 +558,7 @@ class Sudoku:
         ans = list()
         for row in self.answers:
             ans.append("|".join([str(r) if r else "_" for r in row]))
-        return '\n'.join(["Dumping answer:", *ans])
+        return "\n".join(["Dumping answer:", *ans])
 
     def endgame(self):
         if self.is_solved():
