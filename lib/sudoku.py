@@ -165,6 +165,7 @@ class Sudoku:
         self.update_pencilmarks_col(value, col_i)
         self.update_pencilmarks_box(value, (row_i, col_i))
         self.update_pencilmarks_cell((row_i, col_i))
+        self.update_pencilmarks_locks()
 
         logging.debug(f"[PENCILMARKS] We have updated pencilmarks thanks to | {value=} {cell_i=}")
         logging.debug("[PENCILMARKS] [DATA]:\n" + str(self))
@@ -188,6 +189,53 @@ class Sudoku:
     def update_pencilmarks_cell(self, box_i):
         row_i, col_i = box_i
         self.pencilmarks[row_i][col_i] = list()
+
+    # This function takes us from weeny-hut jr to the salty spitoon.
+    #
+    # A lock is a pair of cells in a line that can only be 2 values. Any cell
+    # in that line cannot have either of their values, so we can use this to
+    # clear pencilmarks
+    def update_pencilmarks_locks(self):
+        for lock in self.identify_locks():
+            orientation, values, cells = lock
+
+            # Destructure the answer
+            row = list()
+            col = list()
+            for cell in cells:
+                row.append(cell[0])
+                col.append(cell[1])
+
+            if orientation == "row":
+                row_i = row[0]
+                for col_i in [c for c in range(9) if c not in col]:
+                    for value in values:
+                        reason = f"row {cells=} have {values}"
+                        self.log_pencilmark_lock(value, cell_i, reason)
+                        self.erase_pencilmark(value, (row_i, col_i))
+            elif orientation == "col":
+                col_i = col[0]
+                for row_i in [r for r in range(9) if r not in row]:
+                    for value in values:
+                        reason = f"col {cells=} have {values}"
+                        self.log_pencilmark_lock(value, cell_i, reason)
+                        self.erase_pencilmark(value, (row_i, col_i))
+            elif orientation == "box":
+                for box_i in product([0, 3, 6], [0, 3, 6]):
+                    for cell_i in [ci for c in self.get_range_box_i(box_i) if ci not in cells]:
+                        for value in values:
+                            reason = f"box {cells=} have {values}"
+                            self.log_pencilmark_lock(value, cell_i, reason)
+                            self.erase_pencilmark(value, cell_i)
+            else:
+                log.error("Unknown orientation from 'identify_locks' | {orientation=}")
+                sys.exit(1)
+
+    def log_pencilmark_lock(self, value, cell_i, reason):
+        logging.warning("[PENCILMARKS] [LOCK] Erasing pencilmark | {value=} {cell_i=} {reason=}")
+
+    def identify_locks(self):
+        yield "row", [], (1, 1), (2, 2)
 
     def scan_answers(self):
         self.is_solved() or \
@@ -310,12 +358,17 @@ class Sudoku:
             yield self.pencilmarks[row_i][col_i]
 
     def get_range_box(self, box_i):
+        range_obj = self.get_range_box_i(box_i)
+        for r, c in range_obj:
+            yield self.pencilmarks[r][c]
+
+    def get_range_box_i(self, box_i):
         row_i, col_i = box_i
         box_bot, box_top = self.box_unclamp(row_i)
         box_left, box_right = self.box_unclamp(col_i)
         for row_i in range(box_bot, box_top):
             for col_i in range(box_left, box_right):
-                yield self.pencilmarks[row_i][col_i]
+                yield row_i, col_i
 
     def is_solved(self):
         for row in self.answers:
