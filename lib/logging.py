@@ -8,11 +8,11 @@ def setup_logging():
 
     # Find where to log
     data_root = os.getenv("XDG_DATA_HOME")
-    logdir = Path(data_root) / "ari_sudoku"
-    logdir.mkdir()
+    logdir = Path(data_root) / "ebi"
+    logdir.mkdir(exist_ok=True)
 
     # Create a file handler to log messages to a file
-    file_handler = logging.FileHandler(logdir / 'sudoku.log')
+    file_handler = logging.FileHandler(logdir / 'ebi.log')
     file_handler.setLevel(logging.DEBUG)  # Set the file handler level to DEBUG to capture all messages
     file_handler.setFormatter(formatter)
 
@@ -23,7 +23,7 @@ def setup_logging():
 
     # Get the root logger and set its level to INFO
     root_logger = logging.getLogger()
-    root_logger.setLevel(logging.INFO)
+    root_logger.setLevel(logging.DEBUG)
 
     # Add the handlers to the root logger
     root_logger.addHandler(file_handler)
