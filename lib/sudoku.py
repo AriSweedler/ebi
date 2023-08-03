@@ -1,4 +1,5 @@
 import logging
+import sys
 from itertools import product
 from typing import List
 
@@ -150,6 +151,7 @@ class Sudoku:
         *cell_i, value = self.pop_box_number()
         if value is None:
             self.endgame()
+            return True
         logging.debug(
             f"[PENCILMARKS] We have a box number to deal with | {cell_i=} {value=}"
         )
@@ -261,7 +263,7 @@ class Sudoku:
                 logging.error(
                     f"[PENCILMARKS] [LOCK] [FAIL] Unknown orientation from 'identify_locks' | {orientation=}"
                 )
-                exit(1)
+                sys.exit(1)
         return did_work
 
     def log_pencilmark_lock(self, value, cell_i, reason):
@@ -365,7 +367,7 @@ class Sudoku:
                 logging.error(
                     f"[PENCILMARKS] [DAGGER] [FAIL] Unknown orientation from 'identify_daggers' | {orientation=}"
                 )
-                exit(1)
+                sys.exit(1)
 
         return did_work
 
@@ -513,7 +515,7 @@ class Sudoku:
             logging.error(
                 f"[ANSWERS] [RECORD] [FAIL] You are placing a number in a col where it already has been. | {value=} {cell_i=}"
             )
-            exit(1)
+            sys.exit(1)
             return
 
     def get_pencilmarks_in_range_row(self, row_i):
@@ -577,10 +579,10 @@ class Sudoku:
             logging.info(f"[ENDGAME] Solved!")
             logging.info(f"[ENDGAME] " + self.dump_initial_puzzle())
             logging.info(f"[ENDGAME] " + self.dump_answers())
-            exit(0)
+            return True
 
         logging.error(f"[ENDGAME] [FAIL] Oh no - we are all out of clues")
         logging.error(f"[ENDGAME] [FAIL] " + self.dump_initial_puzzle())
         logging.error(f"[ENDGAME] [FAIL] \n" + str(self))
         logging.error(f"[ENDGAME] [FAIL] " + self.dump_answers())
-        exit(1)
+        sys.exit(1)

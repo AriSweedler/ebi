@@ -3,7 +3,7 @@ import os
 from pathlib import Path
 
 
-def setup_logging():
+def setup_logging(no_logfile=False):
     # Create a formatter to define the log message format
     formatter = logging.Formatter(
         "%(asctime)s - %(levelname)s - %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
@@ -31,5 +31,8 @@ def setup_logging():
     root_logger.setLevel(logging.DEBUG)
 
     # Add the handlers to the root logger
-    root_logger.addHandler(file_handler)
+    if no_logfile:
+        pass
+    else:
+        root_logger.addHandler(file_handler)
     root_logger.addHandler(stream_handler)
