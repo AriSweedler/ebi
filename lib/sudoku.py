@@ -1,7 +1,4 @@
-import os
 import logging
-import sys
-import time
 from itertools import product
 from typing import List
 
@@ -25,6 +22,7 @@ Pencilmark = List[int]
 class Sudoku:
     pencilmarks = None
     box_numbers = None
+    initial_puzzle = None
     answers = [[None for _ in range(9)] for _ in range(9)]
     used_locks = set()
     used_daggers = set()
@@ -41,10 +39,12 @@ class Sudoku:
 
         # Load all the original numbers into the 'box_numbers' queue for later processing
         self.box_numbers = list()
+        self.initial_puzzle = list()
         for line in _data:
             row_str = [l for l in line.strip().split(",") if l != ""]
             row = self.validate_row(row_str)
             self.box_numbers.append([r for r in row])
+            self.initial_puzzle.append([r for r in row])
         self.validate_input()
 
         # Now go through all the original box numbers and update the
@@ -126,8 +126,6 @@ class Sudoku:
         )
 
     def pop_box_number(self):
-        if os.getenv("VISUAL"):
-            time.sleep(0.01)
         row_i = None
         col_i = None
         value = None
@@ -221,7 +219,7 @@ class Sudoku:
         for lock in self.identify_locks():
             did_work = True
             orientation, values, cells = lock
-            logging.info(
+            logging.debug(
                 f"[PENCILMARKS] [LOCK] [IDENTIFY] We found a lock | {orientation=} {values=}, {cells=}"
             )
 
@@ -236,7 +234,7 @@ class Sudoku:
                 row_i = row[0]
                 for col_i in [c for c in range(9) if c not in col]:
                     for value in values:
-                        reason = f"row {cells=} have {values}"
+                        reason = f"lock in row {cells=} have {values}"
                         cell_i = (row_i, col_i)
                         self.log_pencilmark_lock(value, cell_i, reason)
                         self.erase_pencilmark(value, cell_i)
@@ -244,7 +242,7 @@ class Sudoku:
                 col_i = col[0]
                 for row_i in [r for r in range(9) if r not in row]:
                     for value in values:
-                        reason = f"col {cells=} have {values}"
+                        reason = f"lock in col {cells=} have {values}"
                         cell_i = (row_i, col_i)
                         self.log_pencilmark_lock(value, cell_i, reason)
                         self.erase_pencilmark(value, cell_i)
@@ -256,20 +254,21 @@ class Sudoku:
                     if ci not in cells
                 ]:
                     for value in values:
-                        reason = f"box {cells=} have {values}"
+                        reason = f"lock in box {cells=} have {values}"
                         self.log_pencilmark_lock(value, cell_i, reason)
                         self.erase_pencilmark(value, cell_i)
             else:
                 logging.error(
                     f"[PENCILMARKS] [LOCK] [FAIL] Unknown orientation from 'identify_locks' | {orientation=}"
                 )
-                sys.exit(1)
+                exit(1)
         return did_work
 
     def log_pencilmark_lock(self, value, cell_i, reason):
-        logging.debug(
-            f"[PENCILMARKS] [LOCK] Erasing pencilmark | {value=} {cell_i=} {reason=}"
-        )
+        # logging.debug(f"[PENCILMARKS] [LOCK] [ERASE] [ATTEMPT] | {value=} {cell_i=} {reason=}")
+        row_i, col_i = cell_i
+        if value in self.pencilmarks[row_i][col_i]:
+            logging.info(f"[PENCILMARKS] [LOCK] [ERASE] | {value=} {cell_i=} {reason=}")
 
     def hash_lockcell(self, lockcell):
         orientation, index, pencilmarks, _ = lockcell
@@ -308,7 +307,7 @@ class Sudoku:
             orientation, _, pencilmarks, cell_i = lockcell_list[0]
 
             # Don't use this lock if it doesn't make sense to
-            if not 2 <= len(lockcell_list) <= 4:
+            if not 2 <= len(lockcell_list) <= 8:
                 # NOTE:
                 # I feel like I'm cheating by using 4-locks. I RARELY use 3-locks.
                 continue
@@ -340,14 +339,14 @@ class Sudoku:
         for dagger in self.identify_daggers():
             did_work = True
             orientation, value, cells = dagger
-            logging.info(
+            logging.debug(
                 f"[PENCILMARKS] [DAGGER] [IDENTIFY] We found a dagger | {orientation=} {value=}, {cells=}"
             )
 
             if orientation == "row":
                 row_i, _ = cells[0]
                 for col_i in [c for c in range(9)]:
-                    reason = f"row {cells=} {value=}"
+                    reason = f"dagger in row {cells=}"
                     cell_i = (row_i, col_i)
                     if cell_i in cells:
                         continue
@@ -356,7 +355,7 @@ class Sudoku:
             elif orientation == "col":
                 _, col_i = cells[0]
                 for row_i in [r for r in range(9)]:
-                    reason = f"col {cells=} {value=}"
+                    reason = f"dagger in col {cells=}"
                     cell_i = (row_i, col_i)
                     if cell_i in cells:
                         continue
@@ -366,7 +365,7 @@ class Sudoku:
                 logging.error(
                     f"[PENCILMARKS] [DAGGER] [FAIL] Unknown orientation from 'identify_daggers' | {orientation=}"
                 )
-                sys.exit(1)
+                exit(1)
 
         return did_work
 
@@ -392,15 +391,22 @@ class Sudoku:
         for box_i in range(9):
             r, c = list(self.get_box_range_from_box_i(box_i))[0]
             for o0, o1, o2 in [(0, 1, 2), (2, 0, 1), (1, 2, 0)]:
-                yield "row", list(product([r+o0], [c, c+1, c+2])), list(product([r+o1, r+o2], [c, c+1, c+2]))
-                yield "col", list(product([r, r+1, r+2], [c+o0])), list(product([r, r+1, r+2], [c+o1, c+o2]))
-
+                yield "row", list(product([r + o0], [c, c + 1, c + 2])), list(
+                    product([r + o1, r + o2], [c, c + 1, c + 2])
+                )
+                yield "col", list(product([r, r + 1, r + 2], [c + o0])), list(
+                    product([r, r + 1, r + 2], [c + o1, c + o2])
+                )
 
     def log_pencilmark_dagger(self, value, cell_i, reason):
         logging.debug(
-            f"[PENCILMARKS] [DAGGER] [ERASE] | {value=} {cell_i=} {reason=}"
+            f"[PENCILMARKS] [DAGGER] [ERASE] [ATTEMPT] | {value=} {cell_i=} {reason=}"
         )
-
+        row_i, col_i = cell_i
+        if value in self.pencilmarks[row_i][col_i]:
+            logging.info(
+                f"[PENCILMARKS] [DAGGER] [ERASE] | {value=} {cell_i=} {reason=}"
+            )
 
     def scan_answers(self):
         self.is_solved() or self.scan_answers_rows() or self.scan_answers_cols() or self.scan_answers_boxes() or self.scan_answers_cells()
@@ -507,7 +513,7 @@ class Sudoku:
             logging.error(
                 f"[ANSWERS] [RECORD] [FAIL] You are placing a number in a col where it already has been. | {value=} {cell_i=}"
             )
-            sys.exit(1)
+            exit(1)
             return
 
     def get_pencilmarks_in_range_row(self, row_i):
@@ -560,13 +566,21 @@ class Sudoku:
             ans.append("|".join([str(r) if r else "_" for r in row]))
         return "\n".join(["Dumping answer:", *ans])
 
+    def dump_initial_puzzle(self):
+        ip = list()
+        for row in self.initial_puzzle:
+            ip.append("|".join([str(r) if r else "_" for r in row]))
+        return "\n".join(["Dumping initial_puzzle:", *ip])
+
     def endgame(self):
         if self.is_solved():
             logging.info(f"[ENDGAME] Solved!")
+            logging.info(f"[ENDGAME] " + self.dump_initial_puzzle())
             logging.info(f"[ENDGAME] " + self.dump_answers())
-            sys.exit(0)
+            exit(0)
 
         logging.error(f"[ENDGAME] [FAIL] Oh no - we are all out of clues")
+        logging.error(f"[ENDGAME] [FAIL] " + self.dump_initial_puzzle())
         logging.error(f"[ENDGAME] [FAIL] \n" + str(self))
         logging.error(f"[ENDGAME] [FAIL] " + self.dump_answers())
-        sys.exit(1)
+        exit(1)
