@@ -11,8 +11,10 @@ def setup_logging(no_logfile=False):
 
     # Find where to log
     data_root = os.getenv("XDG_DATA_HOME")
+    if data_root is None:
+        data_root = "./my_data_root"
     logdir = Path(data_root) / "ebi"
-    logdir.mkdir(exist_ok=True)
+    logdir.mkdir(exist_ok=True, parents=True)
 
     # Create a file handler to log messages to a file
     file_handler = logging.FileHandler(logdir / "ebi.log")
